@@ -1,0 +1,8 @@
+setuptools
+pandas
+numpy
+psycopg2
+scikit-learn
+ipykernel
+imbalanced-learn
+redis
