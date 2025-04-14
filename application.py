@@ -8,9 +8,14 @@ from src.feature_store import RedisFeatureStore
 from sklearn.preprocessing import StandardScaler
 from src.logger import get_logger
 
+from prometheus_client import start_http_server,Counter,Gauge
+
 logger = get_logger(__name__)
 
 app = Flask(__name__,template_folder='templates')
+
+prediction_count = Counter('prediction_count'," Number of prediction count" )
+drift_count = Counter("drift_count", "Number of times data drift is detected")
 
 MODEL_PATH = 'artifacts/models/random_forest.pkl'
 with open(MODEL_PATH,'rb') as model_file:
@@ -58,9 +63,7 @@ def predict():
         features = pd.DataFrame([[Age, Fare, Pclass, Sex, Embarked, Familysize, Isalone,
        HasCabin, Title, Pclass_Fare, Age_Fare]],columns=FEATURE_NAMES)
         
-        prediction = model.predict(features)[0]
-
-        #### DATA DRIFT DETECTION
+         #### DATA DRIFT DETECTION
         features_scaled = scaler.transform(features)
 
         drift = ksd.predict(features_scaled)      
@@ -71,16 +74,31 @@ def predict():
         if is_drift is not None and is_drift == 1:
             print("Drift Detected")
             logger.info("Drift Detected")
+            
+            drift_count.inc()
+        
+        prediction = model.predict(features)[0]
 
         result = 'Survived' if prediction == 1 else 'Did not Survive'
+        prediction_count.inc()
 
         return render_template('index.html',prediction_text = f"The prediction is : {result}")
     
     except Exception as e:
         return jsonify({'error':str(e)})
+    
+@app.route('/metrics')
+def metrics():
+    from prometheus_client import generate_latest
+    from  flask import  Response
+
+    return Response(generate_latest(), content_type='text/plain')
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    start_http_server(8000)
+    app.run(debug=True,host='0.0.0.0',port=5000)
+
+
 
 
         
